@@ -1,8 +1,11 @@
 #!/usr/bin/zsh
 
-
-NAVSIM_PATH=/nas/users/hyzhou/PAMI2024/release/navsim
+# echo "HERE"
+NAVSIM_PATH=/home/mila/g/grandhia/NAVSIM
 cd ${NAVSIM_PATH}
 echo ${PWD}
-CUDA_VISIBLE_DEVICES=${1} pixi run python ltf_e2e.py output=$2
+module load miniconda/3
+conda activate hugsim_ltf
+# echo "CUDA_VISIBLE_DEVICES=${1}"
+CUDA_VISIBLE_DEVICES=${1} python ltf_e2e.py output=$2
 cd -

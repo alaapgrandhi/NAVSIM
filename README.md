@@ -17,7 +17,13 @@ The implementation is based on:
 
 # Installation
 
-You can use `pixi install` to easily install the environment of LTF.
+You can use `pixi install` to easily install the environment of LTF. If you see a network timeout error (e.g. when downloading wheels), run the install with a longer HTTP timeout:
+
+```bash
+./pixi_install.sh
+```
+
+Or manually: `UV_HTTP_TIMEOUT=120 pixi install` (run this in your terminal so the variable is set before pixi starts).
 The model weight of LTF can be downloaded from the official link: https://huggingface.co/autonomousvision/navsim_baselines/tree/main/ltf
 
 Please change ${NAVSIM_PATH} in ltf_e2e.sh as the path on your machine.

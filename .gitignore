@@ -17,6 +17,8 @@ build/
 *.jpg
 *.pcd
 
+weights
+.cursor
 ckpts
 outputs
 # pixi environments

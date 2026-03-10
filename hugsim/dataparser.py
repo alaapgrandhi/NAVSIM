@@ -7,8 +7,8 @@ from navsim.common.dataclasses import AgentInput, EgoStatus, Cameras, Camera, Li
 
 OPENCV2IMU = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]])
 OPENCV2LIDAR = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
-nusc_cameras = ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT']
-nuplan_cameras = ["cam_f0", "cam_r0", "cam_l0"]
+nusc_cameras = ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT', 'CAM_BACK']
+nuplan_cameras = ["cam_f0", "cam_r0", "cam_l0", "cam_b0"]
 
 def fov2focal(fov, pixels):
     return pixels / (2 * math.tan(fov / 2))
@@ -26,6 +26,7 @@ def parse_raw(raw_data):
     
     imgs = {}
     raw_imgs = {}
+
     
     for cam in nusc_cameras:
         im = obs['rgb'][cam]
@@ -50,9 +51,27 @@ def parse_raw(raw_data):
     acc[1] = forward_acc * np.sin(yaw)
     ego_status = EgoStatus(ego_pose, velo, acc, command)
     
+    cam_params = info['cam_params']
+
+    # for nusc_cam, nuplan_cam in zip(nusc_cameras, nuplan_cameras):
+    #     print(nusc_cam, nuplan_cam)
+    
+    # for cam_name, cam_data in cam_params.items():
+    #     print(f"cam_params['{cam_name}'] keys: {cam_data.keys() if isinstance(cam_data, dict) else type(cam_data)}")
+    #     if isinstance(cam_data, dict) and 'intrinsic' in cam_data:
+    #         print(f"  intrinsic keys: {cam_data['intrinsic'].keys() if isinstance(cam_data['intrinsic'], dict) else cam_data['intrinsic']}")
+    #     print(cam_data['l2c'])
+
     cameras_dict = {}
     for nusc_cam, nuplan_cam in zip(nusc_cameras, nuplan_cameras):
-        cameras_dict[nuplan_cam] = Camera(image=imgs[nusc_cam])
+        l2c = np.array(cam_params[nusc_cam]['l2c'])  # 4x4 lidar-to-camera
+        c2l = np.linalg.inv(l2c)                      # camera-to-lidar = sensor2lidar
+        sensor2lidar_rotation = c2l[:3, :3]
+        sensor2lidar_translation = c2l[:3, 3]
+        cameras_dict[nuplan_cam] = Camera(image=imgs[nusc_cam], 
+                                          sensor2lidar_rotation=sensor2lidar_rotation, 
+                                          sensor2lidar_translation=sensor2lidar_translation,
+                                          intrinsics=get_intrinsic(cam_params[nusc_cam]['intrinsic']))
         
     cameras = Cameras(*([None] * 8))
     for cam_name, cam in cameras_dict.items():

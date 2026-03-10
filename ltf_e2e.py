@@ -11,7 +11,7 @@ from hugsim.dataparser import parse_raw
 import torch
 
 CONFIG_PATH = "navsim/planning/script/config/HUGSIM"
-CONFIG_NAME = "transfuser"
+CONFIG_NAME = "drivor"
 
 def get_opts():
     parser = argparse.ArgumentParser()
@@ -20,12 +20,35 @@ def get_opts():
 
 @hydra.main(config_path=CONFIG_PATH, config_name=CONFIG_NAME, version_base=None)
 def main(cfg: DictConfig) -> None:
-    cfg.agent.config.latent = True
-    cfg.agent.checkpoint_path = "./ckpts/ltf_seed_0.ckpt"
+    if "latent" in cfg.agent.config:
+        cfg.agent.config.latent = True
+    cfg.agent.checkpoint_path = "./ckpts/drivor_Nav2_10epochs.pth"
+    cfg.agent.scheduler_args.num_epochs = 10
+    cfg.agent.batch_size = 64
     print(cfg)
     agent: AbstractAgent = instantiate(cfg.agent)
     agent.initialize()
-    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    agent.to(device)
+    # region agent log
+    # try:
+    #     import json, time  # local imports for debug logging
+    #     log_path = "/home/mila/g/grandhia/NAVSIM/.cursor/debug-4a084f.log"
+    #     payload = {
+    #         "sessionId": "4a084f",
+    #         "runId": "post-fix",
+    #         "hypothesisId": "H1_nuplan_import",
+    #         "location": "ltf_e2e.py:26",
+    #         "message": "Agent initialized",
+    #         "data": {"agent_class": type(agent).__name__},
+    #         "timestamp": int(time.time() * 1000),
+    #     }
+    #     with open(log_path, "a") as f:
+    #         f.write(json.dumps(payload) + "\n")
+    # except Exception:
+    #     pass
+    # endregion
+
     os.makedirs(cfg.output, exist_ok=True)
     obs_pipe = os.path.join(cfg.output, 'obs_pipe')
     plan_pipe = os.path.join(cfg.output, 'plan_pipe')

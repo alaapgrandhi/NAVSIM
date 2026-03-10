@@ -1,4 +1,4 @@
-name: navsim
+name: hugsim_ltf
 channels:
   - conda-forge
 dependencies:
