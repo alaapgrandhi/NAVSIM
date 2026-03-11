@@ -145,6 +145,30 @@ class DrivoRAgent(AbstractAgent):
             else:
                 state_dict: Dict[str, Any] = torch.load(self._checkpoint_path, map_location=torch.device("cpu"))[
                     "state_dict"]
+            
+
+            state_dict = {k.replace("agent._drivor_model", "_drivor_model"): v for k, v in state_dict.items()}
+            
+            model_state = self.state_dict()
+            for key in list(state_dict.keys()):
+                if "pos_embed" in key and key in model_state:
+                    if state_dict[key].shape != model_state[key].shape:
+                        old_pe = state_dict[key]  # [1, old_N, D]
+                        new_pe = model_state[key]  # [1, new_N, D]
+                        D = old_pe.shape[-1]
+                        
+                        patch_size = self._drivor_model.image_backbone.patch_size
+                        img_w, img_h = self._config.image_size
+                        new_H, new_W = img_h // patch_size, img_w // patch_size
+                        
+                        old_N = old_pe.shape[1]
+                        old_H = int(round((old_N * new_H / new_W) ** 0.5))
+                        old_W = old_N // old_H
+                        
+                        old_pe = old_pe.reshape(1, old_H, old_W, D).permute(0, 3, 1, 2).float()
+                        new_pe = F.interpolate(old_pe, size=(new_H, new_W), mode='bicubic', align_corners=False)
+                        state_dict[key] = new_pe.permute(0, 2, 3, 1).reshape(1, -1, D)
+
             self.load_state_dict({k.replace("agent._drivor_model", "_drivor_model"): v for k, v in state_dict.items()})
 
     def get_sensor_config(self) :

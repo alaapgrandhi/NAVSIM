@@ -22,7 +22,7 @@ def get_opts():
 def main(cfg: DictConfig) -> None:
     if "latent" in cfg.agent.config:
         cfg.agent.config.latent = True
-    cfg.agent.checkpoint_path = "./ckpts/drivor_Nav2_10epochs.pth"
+    cfg.agent.checkpoint_path = "./ckpts/drivor_mini.pth"
     cfg.agent.scheduler_args.num_epochs = 10
     cfg.agent.batch_size = 64
     print(cfg)
