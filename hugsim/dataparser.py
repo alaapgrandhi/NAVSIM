@@ -4,6 +4,12 @@ import numpy as np
 from scipy.spatial.transform import Rotation as SCR
 import math
 from navsim.common.dataclasses import AgentInput, EgoStatus, Cameras, Camera, Lidar
+from pyquaternion import Quaternion
+from navsim.planning.simulation.planner.pdm_planner.utils.pdm_geometry_utils import (
+    convert_absolute_to_relative_se2_array,
+)
+from nuplan.common.actor_state.state_representation import StateSE2
+
 
 OPENCV2IMU = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]])
 OPENCV2LIDAR = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
@@ -35,13 +41,12 @@ def parse_raw(raw_data):
         imgs[cam] = resize_im
 
     velo, acc = np.zeros(2), np.zeros(2)
+    HUGSIM_TO_DRIVOR_COMMAND = {0: 2, 1: 0, 2: 1, 3: 3}
     command = np.zeros(4)
-    # print('cmd', info['command'])
-    # command[info['command']] = 1
-    command[1] = 1
+    command[HUGSIM_TO_DRIVOR_COMMAND.get(info['command'], 3)] = 1
     
     ego_pose = OPENCV2IMU @ info['ego_pos']
-    # yaw = -info['ego_rot'][1]
+    ego_rot = info['ego_rot']
     yaw = -info['ego_steer']
     forward_velo = info['ego_velo']
     forward_acc = info['accelerate']
@@ -49,18 +54,23 @@ def parse_raw(raw_data):
     velo[1] = forward_velo * np.sin(yaw)
     acc[0] = forward_acc * np.cos(yaw)
     acc[1] = forward_acc * np.sin(yaw)
-    ego_status = EgoStatus(ego_pose, velo, acc, command)
+
+    ego_quaternion = Quaternion(*ego_rot)
+    global_ego_pose = np.array(
+        [ego_pose[0], ego_pose[1], ego_quaternion.yaw_pitch_roll[0]],
+        dtype=np.float64,
+    )
+    local_ego_poses = convert_absolute_to_relative_se2_array(
+        StateSE2(*global_ego_pose), global_ego_pose.reshape(1, *global_ego_pose.shape)
+    )
+    ego_status = EgoStatus(
+                ego_pose=np.array(local_ego_poses[0], dtype=np.float32),
+                ego_velocity=velo,
+                ego_acceleration=acc,
+                driving_command=command,
+            )
     
     cam_params = info['cam_params']
-
-    # for nusc_cam, nuplan_cam in zip(nusc_cameras, nuplan_cameras):
-    #     print(nusc_cam, nuplan_cam)
-    
-    # for cam_name, cam_data in cam_params.items():
-    #     print(f"cam_params['{cam_name}'] keys: {cam_data.keys() if isinstance(cam_data, dict) else type(cam_data)}")
-    #     if isinstance(cam_data, dict) and 'intrinsic' in cam_data:
-    #         print(f"  intrinsic keys: {cam_data['intrinsic'].keys() if isinstance(cam_data['intrinsic'], dict) else cam_data['intrinsic']}")
-    #     print(cam_data['l2c'])
 
     cameras_dict = {}
     for nusc_cam, nuplan_cam in zip(nusc_cameras, nuplan_cameras):

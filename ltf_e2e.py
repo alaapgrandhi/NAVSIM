@@ -22,7 +22,8 @@ def get_opts():
 def main(cfg: DictConfig) -> None:
     if "latent" in cfg.agent.config:
         cfg.agent.config.latent = True
-    cfg.agent.checkpoint_path = "./ckpts/drivor_mini.pth"
+    if "checkpoint_path" not in cfg.agent:
+        cfg.agent.checkpoint_path = "./ckpts/nav1_30epochs_with_134k_simscale_bis_103ktrainval.pth"
     cfg.agent.scheduler_args.num_epochs = 10
     cfg.agent.batch_size = 64
     print(cfg)
@@ -30,24 +31,6 @@ def main(cfg: DictConfig) -> None:
     agent.initialize()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     agent.to(device)
-    # region agent log
-    # try:
-    #     import json, time  # local imports for debug logging
-    #     log_path = "/home/mila/g/grandhia/NAVSIM/.cursor/debug-4a084f.log"
-    #     payload = {
-    #         "sessionId": "4a084f",
-    #         "runId": "post-fix",
-    #         "hypothesisId": "H1_nuplan_import",
-    #         "location": "ltf_e2e.py:26",
-    #         "message": "Agent initialized",
-    #         "data": {"agent_class": type(agent).__name__},
-    #         "timestamp": int(time.time() * 1000),
-    #     }
-    #     with open(log_path, "a") as f:
-    #         f.write(json.dumps(payload) + "\n")
-    # except Exception:
-    #     pass
-    # endregion
 
     os.makedirs(cfg.output, exist_ok=True)
     obs_pipe = os.path.join(cfg.output, 'obs_pipe')
@@ -63,19 +46,23 @@ def main(cfg: DictConfig) -> None:
     
     while True:
         with open(obs_pipe, "rb") as pipe:
-            raw_data = pipe.read()
-            raw_data = pickle.loads(raw_data)
+            raw_bytes = pipe.read()
+        raw_data = pickle.loads(raw_bytes)
         print('received')
         
         if raw_data == 'Done':
             to_video(output_folder)
             exit(0)
         
-        cam_params = raw_data[1]['cam_params']
+        try:
+            cam_params = raw_data[1]['cam_params']
+        except Exception:
+            cam_params = None
+
         data = parse_raw(raw_data)
         raw_images = data['raw_imgs']
         del data['raw_imgs']
-        
+
         try:
             with torch.no_grad():
                 traj = agent.compute_trajectory(data['input'])
@@ -84,7 +71,7 @@ def main(cfg: DictConfig) -> None:
             print(e)
         
         if traj is not None:
-            
+            poses = np.asarray(traj.poses)
             # imu to lidar
             imu_way_points = traj.poses[:, :3]
             way_points = imu_way_points[:, [1, 0, 2]]
@@ -93,11 +80,14 @@ def main(cfg: DictConfig) -> None:
             save_fn = os.path.join(output_folder, f'{str(cnt).zfill(4)}')
             save_frame(raw_images, way_points, cam_params, save_fn)
             with open(plan_pipe, "wb") as pipe:
-                pipe.write(pickle.dumps(way_points[:, :2]))
+                payload = way_points[:, :2]
+                payload_bytes = pickle.dumps(payload)
+                pipe.write(payload_bytes)
             print('sent')
         else:
             with open(plan_pipe, "wb") as pipe:
-                pipe.write(pickle.dumps(None))
+                payload_bytes = pickle.dumps(None)
+                pipe.write(payload_bytes)
             print('Waiting for visualize tasks...')
             to_video(output_folder)
             exit(0)
