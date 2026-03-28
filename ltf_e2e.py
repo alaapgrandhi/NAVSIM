@@ -12,7 +12,7 @@ import torch
 
 CONFIG_PATH = "navsim/planning/script/config/HUGSIM"
 CONFIG_NAME = "drivor"
-CHECKPOINT_PATH = "/network/scratch/g/grandhia/hugsim_data/drivor_Nav2_10epochs.pth"
+# CHECKPOINT_PATH = "/network/scratch/g/grandhia/hugsim_data/drivor_Nav2_10epochs.pth"
 
 def get_opts():
     parser = argparse.ArgumentParser()
@@ -23,7 +23,8 @@ def get_opts():
 def main(cfg: DictConfig) -> None:
     if "latent" in cfg.agent.config:
         cfg.agent.config.latent = True
-    cfg.agent.checkpoint_path = CHECKPOINT_PATH
+    # cfg.agent.checkpoint_path = CHECKPOINT_PATH
+    print("CHECKPOINT_PATH: ", cfg.agent.checkpoint_path)
     cfg.agent.scheduler_args.num_epochs = 10
     cfg.agent.batch_size = 64
     print(cfg)
