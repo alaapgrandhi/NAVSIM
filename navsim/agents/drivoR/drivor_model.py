@@ -106,6 +106,20 @@ class DrivoRModel(nn.Module):
         self.b2d=config.b2d
 
 
+    def _compose_pdm_from_subscores(self, pred_logit: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """Compose final proposal score from the six predicted subscore logits."""
+        return (
+            self._config.noc * pred_logit["no_at_fault_collisions"].sigmoid().log()
+            + self._config.dac * pred_logit["drivable_area_compliance"].sigmoid().log()
+            + self._config.ddc * pred_logit["driving_direction_compliance"].sigmoid().log()
+            + (
+                self._config.ttc * pred_logit["time_to_collision_within_bound"].sigmoid()
+                + self._config.ep * pred_logit["ego_progress"].sigmoid()
+                + self._config.comfort * pred_logit["comfort"].sigmoid()
+            ).log()
+        )
+
+
     def forward(self, features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         
         # ego status and initial traj tokens
@@ -179,7 +193,16 @@ class DrivoRModel(nn.Module):
         embedded_traj = self.pos_embed(proposals.reshape(B, N, -1).detach())  # (B, N, d_model)
         tr_out = self.scorer_attention(embedded_traj, scene_features)  # (B, N, d_model)
         tr_out = tr_out+ego_token
-        pred_logit,pred_logit2, pred_agents_states, pred_area_logit ,bev_semantic_map,agent_states,agent_labels= self.scorer(proposals, tr_out)
+        (
+            pred_logit,
+            pred_logit2,
+            pred_agents_states,
+            pred_area_logit,
+            bev_semantic_map,
+            agent_states,
+            agent_labels,
+            selection_logit,
+        ) = self.scorer(proposals, tr_out)
 
         output["pred_logit"]=pred_logit
         output["pred_logit2"]=pred_logit2
@@ -188,15 +211,12 @@ class DrivoRModel(nn.Module):
         output["bev_semantic_map"]=bev_semantic_map
         output["agent_states"]=agent_states
         output["agent_labels"]=agent_labels
+        output["selection_logit"] = selection_logit
 
-        pdm_score = (
-        self._config.noc * pred_logit['no_at_fault_collisions'].sigmoid().log() +
-        self._config.dac * pred_logit['drivable_area_compliance'].sigmoid().log() +
-        self._config.ddc * pred_logit['driving_direction_compliance'].sigmoid().log() +    
-        (self._config.ttc * pred_logit['time_to_collision_within_bound'].sigmoid() +
-        self._config.ep * pred_logit['ego_progress'].sigmoid()  
-        + self._config.comfort * pred_logit['comfort'].sigmoid()).log()
-        )
+        if selection_logit is not None:
+            pdm_score = selection_logit
+        else:
+            pdm_score = self._compose_pdm_from_subscores(pred_logit)
 
         token = torch.argmax(pdm_score, dim=1)
         trajectory = proposals[torch.arange(batch_size), token]

@@ -88,6 +88,7 @@ config:
   ####################
   # scorer params
   double_score: false
+  use_selection_head: false
   agent_pred: false
   area_pred: false
   bev_map: false

@@ -13,11 +13,19 @@ class Scorer(nn.Module):
 
         self.proposal_num=config.proposal_num
         self.score_num = 6
+        self.use_selection_head = getattr(config, "use_selection_head", False)
 
         # self.pred_score = MLP(config.tf_d_model, config.tf_d_ffn, self.score_num)
 
 
-        self.pred_score = nn.ModuleDict({
+        if self.use_selection_head:
+            self.selection_head = nn.Sequential(
+                nn.Linear(config.tf_d_model, config.tf_d_ffn),
+                nn.ReLU(),
+                nn.Linear(config.tf_d_ffn, 1),
+            )
+        else:
+            self.pred_score = nn.ModuleDict({
             'no_at_fault_collisions': nn.Sequential(
                 nn.Linear(config.tf_d_model, config.tf_d_ffn),
                 nn.ReLU(),
@@ -65,7 +73,7 @@ class Scorer(nn.Module):
 
 
 
-        self.double_score=config.double_score
+        self.double_score=config.double_score and not self.use_selection_head
 
         if self.double_score:
             self.pred_score2 = MLP(config.tf_d_model, config.tf_d_ffn, self.score_num)
@@ -114,11 +122,16 @@ class Scorer(nn.Module):
         t_size=proposals.shape[2]
 
         proposal_feature = bev_feature
-        pred_logit = {}
-        
+        pred_logit = None
+        selection_logit = None
+
         # selected_indices: B,
-        for k, head in self.pred_score.items():
-            pred_logit[k] = head(proposal_feature).squeeze(-1)
+        if self.use_selection_head:
+            selection_logit = self.selection_head(proposal_feature).squeeze(-1)
+        else:
+            pred_logit = {}
+            for k, head in self.pred_score.items():
+                pred_logit[k] = head(proposal_feature).squeeze(-1)
         
         pred_logit2=pred_agents_states=pred_area_logit=bev_semantic_map=agent_states=agent_labels=None
 
@@ -142,4 +155,13 @@ class Scorer(nn.Module):
                 agent_states = agents[:, :, :-1]
                 agent_labels = agents[:, :, -1]
 
-        return pred_logit, pred_logit2, pred_agents_states, pred_area_logit,bev_semantic_map,agent_states,agent_labels
+        return (
+            pred_logit,
+            pred_logit2,
+            pred_agents_states,
+            pred_area_logit,
+            bev_semantic_map,
+            agent_states,
+            agent_labels,
+            selection_logit,
+        )

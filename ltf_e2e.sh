@@ -8,9 +8,9 @@ module load miniconda/3
 conda activate /network/scratch/l/luke.rowe/conda-envs/hugsim_ltf
 # echo "CUDA_VISIBLE_DEVICES=${1}"
 if [ -z "$4" ]; then
-    CUDA_VISIBLE_DEVICES=${1} python ltf_e2e.py output=$2 agent.checkpoint_path=$3
+    CUDA_VISIBLE_DEVICES=${1} python ltf_e2e.py output=$2 agent.checkpoint_path=$3 agent.config.use_selection_head=true
 else
     IMAGE_SIZE=${4}
-    CUDA_VISIBLE_DEVICES=${1} python ltf_e2e.py output=$2 agent.checkpoint_path=$3 agent.config.image_size="[$IMAGE_SIZE]"
+    CUDA_VISIBLE_DEVICES=${1} python ltf_e2e.py output=$2 agent.checkpoint_path=$3 agent.config.image_size="[$IMAGE_SIZE]" agent.config.use_selection_head=true
 fi
 cd -
