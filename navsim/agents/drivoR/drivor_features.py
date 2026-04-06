@@ -58,6 +58,9 @@ class DrivoRFeatureBuilder(AbstractFeatureBuilder):
             driving_command = torch.tensor(ego_status.driving_command, dtype=torch.float32)
             ego_feature=torch.cat([pose,velocity, acceleration, driving_command], dim=-1)
 
+            if getattr(self._config, "pad_ego_length_width", False):
+                ego_feature = torch.cat([ego_feature, torch.tensor([4.63, 1.89], dtype=torch.float32)], dim=-1)
+
             ego_feature_list.append(ego_feature)
 
         features["ego_status"] =torch.stack(ego_feature_list)

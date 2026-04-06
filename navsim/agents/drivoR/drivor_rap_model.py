@@ -68,10 +68,11 @@ class DrivoRModelRAP(nn.Module):
             self.lidar_scene_embeds = nn.Parameter(torch.randn(1, self.num_lidar, self._config.num_scene_tokens, self.image_backbone.num_features)*1e-6, requires_grad=True)
 
         # ego status encoder
+        ego_dim = 13 if getattr(config, "pad_ego_length_width", False) else 11
         if self._config.full_history_status:
-            self.hist_encoding = nn.Linear(11*4, config.tf_d_model)
+            self.hist_encoding = nn.Linear(ego_dim*4, config.tf_d_model)
         else:
-            self.hist_encoding = nn.Linear(11, config.tf_d_model)
+            self.hist_encoding = nn.Linear(ego_dim, config.tf_d_model)
 
         # trajectory embdedding
         if self._config.one_token_per_traj:

@@ -14,6 +14,7 @@ config:
   num_scene_tokens: 16 
   one_token_per_traj: true
   full_history_status: false
+  pad_ego_length_width: true
 
   long_trajectory_additional_poses: -1 # to load additional poses (not use currently in this version)
 
