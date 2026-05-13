@@ -59,7 +59,10 @@ class DrivoRFeatureBuilder(AbstractFeatureBuilder):
             ego_feature=torch.cat([pose,velocity, acceleration, driving_command], dim=-1)
 
             if getattr(self._config, "pad_ego_length_width", False):
-                ego_feature = torch.cat([ego_feature, torch.tensor([4.63, 1.89], dtype=torch.float32)], dim=-1)
+                # nuplan-devkit Pacifica (vehicle_parameters.py:125-138): front_length
+                # 4.049 + rear_length 1.127 = 5.176; width 1.1485 * 2 = 2.297. Same dims
+                # puffer-drive reads via ScenarioMax — match at HUGSIM eval time.
+                ego_feature = torch.cat([ego_feature, torch.tensor([5.176, 2.297], dtype=torch.float32)], dim=-1)
 
             ego_feature_list.append(ego_feature)
 
