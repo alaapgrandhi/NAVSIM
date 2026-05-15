@@ -8,6 +8,7 @@ from .transformer_decoder import TransformerDecoder, TransformerDecoderScorer
 from .layers.image_encoder.dinov2_lora import ImgEncoder
 from .layers.utils.mlp import MLP
 from navsim.agents.drivoR.utils import pylogger
+from navsim.agents.drivoR.drivor_features import REWARD_CONDITIONING_DIM
 log = pylogger.get_pylogger(__name__)
 import logging
 # log.setLevel(logging.DEBUG)
@@ -67,11 +68,20 @@ class DrivoRModel(nn.Module):
             self.lidar_backbone = ImgEncoder(config_lidar_backbone)
             self.lidar_scene_embeds = nn.Parameter(torch.randn(1, self.num_lidar, self._config.num_scene_tokens, self.image_backbone.num_features)*1e-6, requires_grad=True)
 
-        # ego status encoder
+        # ego status encoder: 13-dim base when padding L/W (matches DriveDrivoRFull),
+        # else 11-dim. When pad_reward_conditioning is on, append the 12-dim normalized
+        # reward vector -> 25-dim. Kept in sync with gigapixel-dev/DrivoR.
         ego_dim = 13 if getattr(config, "pad_ego_length_width", False) else 11
+        pad_rc = getattr(config, "pad_reward_conditioning", False)
+        if pad_rc and not getattr(config, "pad_ego_length_width", False):
+            raise ValueError("pad_reward_conditioning=True requires pad_ego_length_width=True")
         if self._config.full_history_status:
+            if pad_rc:
+                raise ValueError("pad_reward_conditioning=True is not supported with full_history_status")
             self.hist_encoding = nn.Linear(ego_dim*4, config.tf_d_model)
         else:
+            if pad_rc:
+                ego_dim += REWARD_CONDITIONING_DIM
             self.hist_encoding = nn.Linear(ego_dim, config.tf_d_model)
 
         # trajectory embdedding

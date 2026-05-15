@@ -8,13 +8,15 @@ config:
   ref_num: 4 # number of refining steps
   scorer_ref_num: 4
 
-  proposal_num: 64 # number of proposals (trajectories)
+  proposal_num: 1 # number of proposals (trajectories); must match the checkpoint's init_feature (gigapixel post-training used proposal_num=1)
   num_poses: 8 # size if the trajectories
 
   num_scene_tokens: 16 
   one_token_per_traj: true
   full_history_status: false
-  pad_ego_length_width: true
+  pad_ego_length_width: true  # 13-dim ego base (11 + L/W), matches gigapixel DriveDrivoRFull
+  pad_reward_conditioning: true  # append the 12 normalized reward coefs -> 25-dim ego (gigapixel was reward-conditioned). Requires pad_ego_length_width=true.
+  shift_predictions_to_rear_axle: true  # gigapixel checkpoints predict bbox-center deltas; shift them to rear-axle before HUGSIM consumes the waypoints.
 
   long_trajectory_additional_poses: -1 # to load additional poses (not use currently in this version)
 

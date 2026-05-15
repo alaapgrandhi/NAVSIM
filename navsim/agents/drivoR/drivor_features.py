@@ -27,6 +27,36 @@ from navsim.planning.training.abstract_feature_target_builder import (
 from PIL import Image
 from scipy.interpolate import CubicSpline
 
+
+REWARD_CONDITIONING_DIM = 12
+# Normalized reward coefficients matching the defaults used at gigapixel training
+# time. Order: collision, offroad, comfort, lane_align, lane_center, velocity,
+# traffic_light, timestep, reverse, goal_radius, overspeed, goal_speed_tol.
+# Kept in sync with gigapixel-dev/DrivoR navsim/agents/drivoR/drivor_features.py.
+REWARD_CONDITIONING_VECTOR = (
+    -1.0, -1.0, -1.0, 1.0, 0.0207, 0.0,
+    -1.0, 0.0, -0.3103, -0.4, 1.0, 1.0,
+)
+
+# Pacifica rear-axle to bbox-center distance: (front_length 4.049 - rear_length 1.127) / 2.
+REAR_AXLE_TO_CENTER = 1.461
+
+
+def predictions_center_to_rear_axle(poses):
+    """Convert (..., P, 3) ego-frame waypoint deltas from bbox-center to rear-axle.
+
+    Gigapixel-trained models predict (dx, dy, dh) deltas in the ego frame at t=0
+    where the ego is the bbox center; HUGSIM consumes waypoints pinned to the
+    rear axle. This shift makes the deltas rear-axle native. On a straight
+    segment (dh=0) the shift is a no-op. Kept in sync with gigapixel-dev/DrivoR.
+    """
+    h = poses[..., 2]
+    out = poses.copy() if hasattr(poses, "copy") else poses.clone()
+    out[..., 0] = poses[..., 0] + REAR_AXLE_TO_CENTER * (1.0 - np.cos(h))
+    out[..., 1] = poses[..., 1] - REAR_AXLE_TO_CENTER * np.sin(h)
+    return out
+
+
 class DrivoRFeatureBuilder(AbstractFeatureBuilder):
     def __init__(self, config: Dict):
         self._config = config
@@ -64,6 +94,16 @@ class DrivoRFeatureBuilder(AbstractFeatureBuilder):
                 # puffer-drive reads via ScenarioMax — match at HUGSIM eval time.
                 ego_feature = torch.cat([ego_feature, torch.tensor([5.176, 2.297], dtype=torch.float32)], dim=-1)
 
+            if getattr(self._config, "pad_reward_conditioning", False):
+                if not getattr(self._config, "pad_ego_length_width", False):
+                    raise ValueError(
+                        "pad_reward_conditioning=True requires pad_ego_length_width=True "
+                        "(gigapixel reward-conditioned models expect a 13-dim ego base)."
+                    )
+                ego_feature = torch.cat(
+                    [ego_feature, torch.tensor(list(REWARD_CONDITIONING_VECTOR), dtype=torch.float32)], dim=-1
+                )
+
             ego_feature_list.append(ego_feature)
 
         features["ego_status"] =torch.stack(ego_feature_list)
@@ -79,10 +119,11 @@ class DrivoRFeatureBuilder(AbstractFeatureBuilder):
 
         cameras = agent_input.cameras[-1]
 
-        # cameras = [cameras.cam_b0, cameras.cam_f0, cameras.cam_l0, cameras.cam_l1, cameras.cam_l2, cameras.cam_r0, cameras.cam_r1, cameras.cam_r2]
-
-        # this is a change for the focus front cam
-        cameras = [cameras.cam_f0, cameras.cam_b0, cameras.cam_l0, cameras.cam_l1, cameras.cam_l2, cameras.cam_r0, cameras.cam_r1, cameras.cam_r2]
+        # Order must match gigapixel DriveDrivoRFull (0=front, 1=left, 2=right, 3=rear)
+        # because scene_embeds is a learned per-position parameter — feeding cameras in a
+        # different order misaligns every non-front embedding. Kept in sync with
+        # gigapixel-dev/DrivoR navsim/agents/drivoR/drivor_features.py.
+        cameras = [cameras.cam_f0, cameras.cam_l0, cameras.cam_r0, cameras.cam_b0, cameras.cam_l1, cameras.cam_l2, cameras.cam_r1, cameras.cam_r2]
 
         images = []
         cam_Ks = []

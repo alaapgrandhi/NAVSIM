@@ -8,11 +8,25 @@ import os
 import pickle
 from hugsim.visualize import to_video, save_frame
 from hugsim.dataparser import parse_raw
+from navsim.agents.drivoR.drivor_features import predictions_center_to_rear_axle
 import torch
 
 CONFIG_PATH = "navsim/planning/script/config/HUGSIM"
 CONFIG_NAME = "drivor"
 # CHECKPOINT_PATH = "/network/scratch/g/grandhia/hugsim_data/drivor_Nav2_10epochs.pth"
+
+
+def _envflag(name: str, default: bool) -> bool:
+    """Per-run override of a boolean agent-config flag via environment variable.
+
+    Env vars inherit down the whole launch chain (sbatch -> run_eval_*.sh ->
+    closed_loop.py -> launch_ad.py -> ltf_e2e.sh -> here), so each SLURM job is
+    isolated — unlike editing the shared drivoR.yaml. Unset env var keeps the
+    yaml default; "1"/"true"/"yes" -> True, anything else -> False.
+    """
+    v = os.getenv(name)
+    return default if v is None else v.strip().lower() in ("1", "true", "yes")
+
 
 def get_opts():
     parser = argparse.ArgumentParser()
@@ -27,6 +41,24 @@ def main(cfg: DictConfig) -> None:
     print("CHECKPOINT_PATH: ", cfg.agent.checkpoint_path)
     cfg.agent.scheduler_args.num_epochs = 10
     cfg.agent.batch_size = 64
+    # Per-run overrides of the gigapixel-checkpoint compat flags (default to the
+    # yaml values, which are true). Set DRIVOR_* env vars in the launching sbatch
+    # script to evaluate a checkpoint trained without these.
+    cfg.agent.config.pad_ego_length_width = _envflag(
+        "DRIVOR_PAD_LW", cfg.agent.config.pad_ego_length_width)
+    cfg.agent.config.pad_reward_conditioning = _envflag(
+        "DRIVOR_REWARD_COND", cfg.agent.config.pad_reward_conditioning)
+    cfg.agent.config.shift_predictions_to_rear_axle = _envflag(
+        "DRIVOR_REAR_AXLE_SHIFT", cfg.agent.config.shift_predictions_to_rear_axle)
+    print(
+        "DRIVOR compat flags: pad_ego_length_width=%s pad_reward_conditioning=%s "
+        "shift_predictions_to_rear_axle=%s"
+        % (
+            cfg.agent.config.pad_ego_length_width,
+            cfg.agent.config.pad_reward_conditioning,
+            cfg.agent.config.shift_predictions_to_rear_axle,
+        )
+    )
     print(cfg)
     agent: AbstractAgent = instantiate(cfg.agent)
     agent.initialize()
@@ -73,8 +105,12 @@ def main(cfg: DictConfig) -> None:
         
         if traj is not None:
             poses = np.asarray(traj.poses)
+            # Gigapixel-distilled checkpoints predict bbox-center deltas in the ego
+            # frame; shift them to rear-axle deltas before the imu->lidar axis swap.
+            if cfg.agent.config.get("shift_predictions_to_rear_axle", False):
+                poses = predictions_center_to_rear_axle(poses)
             # imu to lidar
-            imu_way_points = traj.poses[:, :3]
+            imu_way_points = poses[:, :3]
             way_points = imu_way_points[:, [1, 0, 2]]
             way_points[:, 0] *= -1
             
