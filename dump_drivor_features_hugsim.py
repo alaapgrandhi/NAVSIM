@@ -17,11 +17,13 @@ is fed (front/left/right/rear), denormalised and labelled.
 Launched per-scenario by closed_loop.py via dump_e2e.sh (the `ltf_path` in
 configs/sim/kitti360_base_dump.yaml). Runs in the hugsim_ltf conda env.
 Env vars: DRIVOR_DUMP_N_FRAMES (default 5); the usual DRIVOR_PAD_LW /
-DRIVOR_REWARD_COND / DRIVOR_REAR_AXLE_SHIFT still apply (see ltf_e2e.py).
+DRIVOR_REWARD_COND / DRIVOR_REAR_AXLE_SHIFT / DRIVOR_ORIGINAL_CAMERA_ORDER
+still apply (see ltf_e2e.py).
 """
 import logging
 import os
 import pickle
+from typing import List
 
 import cv2
 import hydra
@@ -42,9 +44,12 @@ logger = logging.getLogger("dump_drivor_features_hugsim")
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-# features["image"] camera order is fixed by DrivoRFeatureBuilder._get_camera_feature:
-# [cam_f0, cam_l0, cam_r0, cam_b0, cam_l1, cam_l2, cam_r1, cam_r2]
-CAM_NAMES = ["front", "left", "right", "rear", "left1", "left2", "right1", "right2"]
+# features["image"] camera order is set by DrivoRFeatureBuilder._get_camera_feature and
+# depends on cfg.agent.config.use_original_camera_order (env: DRIVOR_ORIGINAL_CAMERA_ORDER):
+#   False (gigapixel):       [cam_f0, cam_l0, cam_r0, cam_b0, cam_l1, cam_l2, cam_r1, cam_r2]
+#   True  (public DrivoR):   [cam_f0, cam_b0, cam_l0, cam_l1, cam_l2, cam_r0, cam_r1, cam_r2]
+CAM_NAMES_GIGAPIXEL = ["front", "left", "right", "rear", "left1", "left2", "right1", "right2"]
+CAM_NAMES_ORIGINAL = ["front", "rear", "left", "left1", "left2", "right", "right1", "right2"]
 
 EGO_LABELS = [
     "pose_x", "pose_y", "pose_heading",
@@ -72,13 +77,14 @@ def _denormalize_to_uint8(image_chw_normalized: torch.Tensor) -> np.ndarray:
     return np.transpose(arr, (0, 2, 3, 1))
 
 
-def save_camera_grid(image_uint8: np.ndarray, save_path: str, header: str = "") -> None:
+def save_camera_grid(image_uint8: np.ndarray, save_path: str, header: str = "",
+                     cam_names: List[str] = CAM_NAMES_GIGAPIXEL) -> None:
     """image_uint8: (num_cams, H, W, 3) RGB uint8 -> labelled hconcat PNG."""
     panels = []
     for i, img in enumerate(image_uint8):
         bgr = cv2.cvtColor(np.ascontiguousarray(img), cv2.COLOR_RGB2BGR)
         bgr = cv2.copyMakeBorder(bgr, 26, 2, 2, 2, cv2.BORDER_CONSTANT, value=(0, 0, 0))
-        name = CAM_NAMES[i] if i < len(CAM_NAMES) else f"cam{i}"
+        name = cam_names[i] if i < len(cam_names) else f"cam{i}"
         cv2.putText(bgr, name, (6, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
         panels.append(bgr)
     grid = np.concatenate(panels, axis=1)
@@ -88,7 +94,8 @@ def save_camera_grid(image_uint8: np.ndarray, save_path: str, header: str = "") 
     cv2.imwrite(save_path, grid)
 
 
-def log_feature_stats(tag: str, features: dict) -> None:
+def log_feature_stats(tag: str, features: dict,
+                      cam_names: List[str] = CAM_NAMES_GIGAPIXEL) -> None:
     """Log ego_status (labelled) + per-camera image tensor stats."""
     ego = features["ego_status"]
     ego_last = ego[-1] if ego.dim() == 2 else ego
@@ -101,7 +108,7 @@ def log_feature_stats(tag: str, features: dict) -> None:
     img = features["image"]  # (num_cams, 3, H, W)
     logger.info("[%s] image  shape=%s dtype=%s", tag, tuple(img.shape), img.dtype)
     for i in range(img.shape[0]):
-        cam = CAM_NAMES[i] if i < len(CAM_NAMES) else f"cam{i}"
+        cam = cam_names[i] if i < len(cam_names) else f"cam{i}"
         c = img[i]
         logger.info(
             "        %-7s norm[mean=% .4f std=%.4f min=% .4f max=% .4f]  "
@@ -120,6 +127,9 @@ def main(cfg: DictConfig) -> None:
         "DRIVOR_REWARD_COND", cfg.agent.config.pad_reward_conditioning)
     cfg.agent.config.shift_predictions_to_rear_axle = _envflag(
         "DRIVOR_REAR_AXLE_SHIFT", cfg.agent.config.shift_predictions_to_rear_axle)
+    cfg.agent.config.use_original_camera_order = _envflag(
+        "DRIVOR_ORIGINAL_CAMERA_ORDER",
+        cfg.agent.config.get("use_original_camera_order", False))
     cfg.agent.scheduler_args.num_epochs = 10
     cfg.agent.batch_size = 64
 
@@ -136,10 +146,12 @@ def main(cfg: DictConfig) -> None:
     n_dump_str = "all" if n_dump < 0 else str(n_dump)
     logger.info("=== HUGSIM DrivoR feature dump ===  output=%s  n_dump_frames=%s  (DRIVOR_DUMP_N_FRAMES=%s)",
                 cfg.output, n_dump_str, os.getenv("DRIVOR_DUMP_N_FRAMES", "unset"))
-    logger.info("compat flags: pad_lw=%s reward_cond=%s rear_axle_shift=%s",
+    logger.info("compat flags: pad_lw=%s reward_cond=%s rear_axle_shift=%s "
+                "use_original_camera_order=%s",
                 cfg.agent.config.pad_ego_length_width,
                 cfg.agent.config.pad_reward_conditioning,
-                cfg.agent.config.shift_predictions_to_rear_axle)
+                cfg.agent.config.shift_predictions_to_rear_axle,
+                cfg.agent.config.use_original_camera_order)
     logger.info("checkpoint=%s", cfg.agent.checkpoint_path)
 
     agent: AbstractAgent = instantiate(cfg.agent)
@@ -148,6 +160,10 @@ def main(cfg: DictConfig) -> None:
     agent.to(device)
     feature_builder = agent.get_feature_builders()[0]
     logger.info("agent=%s  feature_builder=%s", type(agent).__name__, type(feature_builder).__name__)
+
+    cam_names = (CAM_NAMES_ORIGINAL if cfg.agent.config.use_original_camera_order
+                 else CAM_NAMES_GIGAPIXEL)
+    logger.info("dump cam-name labels: %s", cam_names)
 
     obs_pipe = os.path.join(cfg.output, "obs_pipe")
     plan_pipe = os.path.join(cfg.output, "plan_pipe")
@@ -176,10 +192,10 @@ def main(cfg: DictConfig) -> None:
             logger.info("-------- frame %d --------", cnt)
             try:
                 features = feature_builder.compute_features(agent_input)
-                log_feature_stats("HUGSIM", features)
+                log_feature_stats("HUGSIM", features, cam_names=cam_names)
                 image_uint8 = _denormalize_to_uint8(features["image"])
                 save_camera_grid(image_uint8, os.path.join(dump_dir, f"frame_{cnt:03d}.png"),
-                                 header=f"HUGSIM  frame {cnt}")
+                                 header=f"HUGSIM  frame {cnt}", cam_names=cam_names)
             except Exception as e:
                 logger.warning("frame %d feature dump failed: %s", cnt, e)
 

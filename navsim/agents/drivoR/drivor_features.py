@@ -1,3 +1,4 @@
+import logging
 from enum import IntEnum
 from typing import Any, Dict, List, Tuple
 import cv2
@@ -5,6 +6,12 @@ import numpy as np
 import numpy.typing as npt
 
 import torch
+
+logger = logging.getLogger(__name__)
+
+# Camera-order log fires once per process (the feature builder is rebuilt per
+# scenario/worker, so guard with a module-level flag).
+_CAMERA_ORDER_LOGGED = False
 # from torchvision import transforms
 
 from shapely import affinity
@@ -119,11 +126,28 @@ class DrivoRFeatureBuilder(AbstractFeatureBuilder):
 
         cameras = agent_input.cameras[-1]
 
-        # Order must match gigapixel DriveDrivoRFull (0=front, 1=left, 2=right, 3=rear)
-        # because scene_embeds is a learned per-position parameter — feeding cameras in a
-        # different order misaligns every non-front embedding. Kept in sync with
-        # gigapixel-dev/DrivoR navsim/agents/drivoR/drivor_features.py.
-        cameras = [cameras.cam_f0, cameras.cam_l0, cameras.cam_r0, cameras.cam_b0, cameras.cam_l1, cameras.cam_l2, cameras.cam_r1, cameras.cam_r2]
+        # scene_embeds is a learned per-position parameter, so the order here MUST match the
+        # order the checkpoint was trained with. Gigapixel-distilled checkpoints use
+        # [f, l, r, b]; the public DrivoR checkpoint (trained pre-commit 4589ff4 on the
+        # forked DrivoR codebase) uses [f, b, l, l1, l2, r, r1, r2]. Toggle via
+        # use_original_camera_order (overridable per run with DRIVOR_ORIGINAL_CAMERA_ORDER).
+        use_original_order = getattr(self._config, "use_original_camera_order", False)
+        if use_original_order:
+            cam_list = [cameras.cam_f0, cameras.cam_b0, cameras.cam_l0, cameras.cam_l1, cameras.cam_l2, cameras.cam_r0, cameras.cam_r1, cameras.cam_r2]
+            cam_names = ["cam_f0", "cam_b0", "cam_l0", "cam_l1", "cam_l2", "cam_r0", "cam_r1", "cam_r2"]
+        else:
+            cam_list = [cameras.cam_f0, cameras.cam_l0, cameras.cam_r0, cameras.cam_b0, cameras.cam_l1, cameras.cam_l2, cameras.cam_r1, cameras.cam_r2]
+            cam_names = ["cam_f0", "cam_l0", "cam_r0", "cam_b0", "cam_l1", "cam_l2", "cam_r1", "cam_r2"]
+        global _CAMERA_ORDER_LOGGED
+        if not _CAMERA_ORDER_LOGGED:
+            _CAMERA_ORDER_LOGGED = True
+            active = [n for n, c in zip(cam_names, cam_list) if c is not None and c.image is not None]
+            mode = "ORIGINAL DrivoR (public checkpoint)" if use_original_order else "gigapixel DriveDrivoRFull"
+            msg = (f"[DrivoR] camera ordering: {mode}  "
+                   f"full={cam_names}  active(after image-None filter)={active}")
+            logger.info(msg)
+            print(msg, flush=True)
+        cameras = cam_list
 
         images = []
         cam_Ks = []

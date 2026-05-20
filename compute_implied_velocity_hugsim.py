@@ -18,6 +18,8 @@ Env vars:
   DRIVOR_PAD_LW             default True
   DRIVOR_REWARD_COND        default True
   DRIVOR_REAR_AXLE_SHIFT    default True
+  DRIVOR_ORIGINAL_CAMERA_ORDER  default False; set 1 to use the [f, b, l, l1, l2, r, r1, r2]
+                                order the public DrivoR checkpoint was trained with
 """
 from __future__ import annotations
 
@@ -62,6 +64,9 @@ def main(cfg: DictConfig) -> None:
         "DRIVOR_REWARD_COND", cfg.agent.config.pad_reward_conditioning)
     cfg.agent.config.shift_predictions_to_rear_axle = _envflag(
         "DRIVOR_REAR_AXLE_SHIFT", cfg.agent.config.shift_predictions_to_rear_axle)
+    cfg.agent.config.use_original_camera_order = _envflag(
+        "DRIVOR_ORIGINAL_CAMERA_ORDER",
+        cfg.agent.config.get("use_original_camera_order", False))
     cfg.agent.scheduler_args.num_epochs = 10
     cfg.agent.batch_size = 64
 
@@ -74,6 +79,12 @@ def main(cfg: DictConfig) -> None:
     logger.setLevel(logging.INFO)
     logger.info("=== compute_implied_velocity_hugsim ===  scenario=%s  csv=%s",
                 scenario_name, csv_path)
+    logger.info("compat flags: pad_lw=%s reward_cond=%s rear_axle_shift=%s "
+                "use_original_camera_order=%s",
+                cfg.agent.config.pad_ego_length_width,
+                cfg.agent.config.pad_reward_conditioning,
+                cfg.agent.config.shift_predictions_to_rear_axle,
+                cfg.agent.config.use_original_camera_order)
 
     agent: AbstractAgent = instantiate(cfg.agent)
     agent.initialize()
