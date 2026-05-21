@@ -8,7 +8,7 @@ config:
   ref_num: 4 # number of refining steps
   scorer_ref_num: 4
 
-  proposal_num: 1 # number of proposals (trajectories); must match the checkpoint's init_feature (gigapixel post-training used proposal_num=1)
+  proposal_num: 64 # number of proposals (trajectories); must match the checkpoint's init_feature (gigapixel post-training used proposal_num=1). Override per run with env var DRIVOR_PROPOSAL_NUM.
   num_poses: 8 # size if the trajectories
 
   num_scene_tokens: 16 

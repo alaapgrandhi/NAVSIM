@@ -28,6 +28,16 @@ def _envflag(name: str, default: bool) -> bool:
     return default if v is None else v.strip().lower() in ("1", "true", "yes")
 
 
+def _envint(name: str, default: int) -> int:
+    """Per-run override of an integer agent-config flag via environment variable.
+
+    Same launch-chain inheritance as _envflag. Unset env var keeps the yaml
+    default.
+    """
+    v = os.getenv(name)
+    return default if v is None or v.strip() == "" else int(v)
+
+
 def get_opts():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=str, required=True)
@@ -53,14 +63,22 @@ def main(cfg: DictConfig) -> None:
     cfg.agent.config.use_original_camera_order = _envflag(
         "DRIVOR_ORIGINAL_CAMERA_ORDER",
         cfg.agent.config.get("use_original_camera_order", False))
+    # proposal_num sizes the model's init_feature embedding, so it MUST match the
+    # checkpoint being loaded (gigapixel post-training used proposal_num=1, the
+    # navsim default is 64). DRIVOR_PROPOSAL_NUM lets each job pick the value for
+    # its checkpoint without editing the shared drivoR.yaml.
+    cfg.agent.config.proposal_num = _envint(
+        "DRIVOR_PROPOSAL_NUM", cfg.agent.config.proposal_num)
     print(
         "DRIVOR compat flags: pad_ego_length_width=%s pad_reward_conditioning=%s "
-        "shift_predictions_to_rear_axle=%s use_original_camera_order=%s"
+        "shift_predictions_to_rear_axle=%s use_original_camera_order=%s "
+        "proposal_num=%s"
         % (
             cfg.agent.config.pad_ego_length_width,
             cfg.agent.config.pad_reward_conditioning,
             cfg.agent.config.shift_predictions_to_rear_axle,
             cfg.agent.config.use_original_camera_order,
+            cfg.agent.config.proposal_num,
         )
     )
     print(cfg)

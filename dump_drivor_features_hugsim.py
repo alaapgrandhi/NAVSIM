@@ -68,6 +68,11 @@ def _envflag(name: str, default: bool) -> bool:
     return default if v is None else v.strip().lower() in ("1", "true", "yes")
 
 
+def _envint(name: str, default: int) -> int:
+    v = os.getenv(name)
+    return default if v is None or v.strip() == "" else int(v)
+
+
 def _denormalize_to_uint8(image_chw_normalized: torch.Tensor) -> np.ndarray:
     """Invert DrivoRFeatureBuilder's ImageNet normalize.
     (num_cams, 3, H, W) float -> (num_cams, H, W, 3) uint8 RGB."""
@@ -130,6 +135,10 @@ def main(cfg: DictConfig) -> None:
     cfg.agent.config.use_original_camera_order = _envflag(
         "DRIVOR_ORIGINAL_CAMERA_ORDER",
         cfg.agent.config.get("use_original_camera_order", False))
+    # proposal_num sizes the model's init_feature embedding -> must match the
+    # checkpoint being loaded. See ltf_e2e.py for details.
+    cfg.agent.config.proposal_num = _envint(
+        "DRIVOR_PROPOSAL_NUM", cfg.agent.config.proposal_num)
     cfg.agent.scheduler_args.num_epochs = 10
     cfg.agent.batch_size = 64
 
