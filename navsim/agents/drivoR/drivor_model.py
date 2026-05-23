@@ -8,7 +8,7 @@ from .transformer_decoder import TransformerDecoder, TransformerDecoderScorer
 from .layers.image_encoder.dinov2_lora import ImgEncoder
 from .layers.utils.mlp import MLP
 from navsim.agents.drivoR.utils import pylogger
-from navsim.agents.drivoR.drivor_features import REWARD_CONDITIONING_DIM
+from navsim.agents.drivoR.drivor_features import REWARD_CONDITIONING_DIM, predictions_center_to_rear_axle_torch
 log = pylogger.get_pylogger(__name__)
 import logging
 # log.setLevel(logging.DEBUG)
@@ -198,10 +198,21 @@ class DrivoRModel(nn.Module):
         output["proposals"] = proposals
         output["proposal_list"] = proposal_list
 
-        # scoring
-        B,N,_,_=proposals.shape
+        # Proposals consumed by the scoring head. The trajectory proposal head predicts
+        # in bbox-center frame; when shift_scoring_proposals_to_rear_axle is set, the
+        # scoring head instead sees rear-axle-frame proposals (matching how the scorer
+        # checkpoint was trained). output["proposals"]/["trajectory"] stay bbox-center,
+        # so the post-hoc shift_predictions_to_rear_axle conversion still applies once.
+        if getattr(self._config, "shift_scoring_proposals_to_rear_axle", False):
+            proposals_for_scoring = predictions_center_to_rear_axle_torch(proposals)
+        else:
+            proposals_for_scoring = proposals
+        output["proposals_for_scoring"] = proposals_for_scoring
 
-        embedded_traj = self.pos_embed(proposals.reshape(B, N, -1).detach())  # (B, N, d_model)
+        # scoring
+        B,N,_,_=proposals_for_scoring.shape
+
+        embedded_traj = self.pos_embed(proposals_for_scoring.reshape(B, N, -1).detach())  # (B, N, d_model)
         tr_out = self.scorer_attention(embedded_traj, scene_features)  # (B, N, d_model)
         tr_out = tr_out+ego_token
         (
@@ -213,7 +224,7 @@ class DrivoRModel(nn.Module):
             agent_states,
             agent_labels,
             selection_logit,
-        ) = self.scorer(proposals, tr_out)
+        ) = self.scorer(proposals_for_scoring, tr_out)
 
         output["pred_logit"]=pred_logit
         output["pred_logit2"]=pred_logit2

@@ -64,6 +64,20 @@ def predictions_center_to_rear_axle(poses):
     return out
 
 
+def predictions_center_to_rear_axle_torch(poses: torch.Tensor) -> torch.Tensor:
+    """Torch equivalent of predictions_center_to_rear_axle for (..., 3) pose deltas.
+
+    Device-preserving with no in-place writes (the numpy version above uses
+    np.cos/np.sin and is not safe on torch tensors). The heading channel is
+    unchanged. Used inside DrivoRModel.forward to feed the scoring head
+    rear-axle-frame proposals.
+    """
+    h = poses[..., 2]
+    dx = poses[..., 0] + REAR_AXLE_TO_CENTER * (1.0 - torch.cos(h))
+    dy = poses[..., 1] - REAR_AXLE_TO_CENTER * torch.sin(h)
+    return torch.stack([dx, dy, h], dim=-1)
+
+
 class DrivoRFeatureBuilder(AbstractFeatureBuilder):
     def __init__(self, config: Dict):
         self._config = config
