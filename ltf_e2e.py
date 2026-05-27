@@ -60,6 +60,9 @@ def main(cfg: DictConfig) -> None:
         "DRIVOR_REWARD_COND", cfg.agent.config.pad_reward_conditioning)
     cfg.agent.config.shift_predictions_to_rear_axle = _envflag(
         "DRIVOR_REAR_AXLE_SHIFT", cfg.agent.config.shift_predictions_to_rear_axle)
+    cfg.agent.config.shift_scoring_proposals_to_rear_axle = _envflag(
+        "DRIVOR_SCORING_REAR_AXLE_SHIFT",
+        cfg.agent.config.get("shift_scoring_proposals_to_rear_axle", False))
     cfg.agent.config.use_original_camera_order = _envflag(
         "DRIVOR_ORIGINAL_CAMERA_ORDER",
         cfg.agent.config.get("use_original_camera_order", False))
@@ -71,12 +74,13 @@ def main(cfg: DictConfig) -> None:
         "DRIVOR_PROPOSAL_NUM", cfg.agent.config.proposal_num)
     print(
         "DRIVOR compat flags: pad_ego_length_width=%s pad_reward_conditioning=%s "
-        "shift_predictions_to_rear_axle=%s use_original_camera_order=%s "
-        "proposal_num=%s"
+        "shift_predictions_to_rear_axle=%s shift_scoring_proposals_to_rear_axle=%s "
+        "use_original_camera_order=%s proposal_num=%s"
         % (
             cfg.agent.config.pad_ego_length_width,
             cfg.agent.config.pad_reward_conditioning,
             cfg.agent.config.shift_predictions_to_rear_axle,
+            cfg.agent.config.shift_scoring_proposals_to_rear_axle,
             cfg.agent.config.use_original_camera_order,
             cfg.agent.config.proposal_num,
         )

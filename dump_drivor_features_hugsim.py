@@ -17,8 +17,8 @@ is fed (front/left/right/rear), denormalised and labelled.
 Launched per-scenario by closed_loop.py via dump_e2e.sh (the `ltf_path` in
 configs/sim/kitti360_base_dump.yaml). Runs in the hugsim_ltf conda env.
 Env vars: DRIVOR_DUMP_N_FRAMES (default 5); the usual DRIVOR_PAD_LW /
-DRIVOR_REWARD_COND / DRIVOR_REAR_AXLE_SHIFT / DRIVOR_ORIGINAL_CAMERA_ORDER
-still apply (see ltf_e2e.py).
+DRIVOR_REWARD_COND / DRIVOR_REAR_AXLE_SHIFT / DRIVOR_SCORING_REAR_AXLE_SHIFT /
+DRIVOR_ORIGINAL_CAMERA_ORDER still apply (see ltf_e2e.py).
 """
 import logging
 import os
@@ -132,6 +132,9 @@ def main(cfg: DictConfig) -> None:
         "DRIVOR_REWARD_COND", cfg.agent.config.pad_reward_conditioning)
     cfg.agent.config.shift_predictions_to_rear_axle = _envflag(
         "DRIVOR_REAR_AXLE_SHIFT", cfg.agent.config.shift_predictions_to_rear_axle)
+    cfg.agent.config.shift_scoring_proposals_to_rear_axle = _envflag(
+        "DRIVOR_SCORING_REAR_AXLE_SHIFT",
+        cfg.agent.config.get("shift_scoring_proposals_to_rear_axle", False))
     cfg.agent.config.use_original_camera_order = _envflag(
         "DRIVOR_ORIGINAL_CAMERA_ORDER",
         cfg.agent.config.get("use_original_camera_order", False))
@@ -156,10 +159,11 @@ def main(cfg: DictConfig) -> None:
     logger.info("=== HUGSIM DrivoR feature dump ===  output=%s  n_dump_frames=%s  (DRIVOR_DUMP_N_FRAMES=%s)",
                 cfg.output, n_dump_str, os.getenv("DRIVOR_DUMP_N_FRAMES", "unset"))
     logger.info("compat flags: pad_lw=%s reward_cond=%s rear_axle_shift=%s "
-                "use_original_camera_order=%s",
+                "scoring_rear_axle_shift=%s use_original_camera_order=%s",
                 cfg.agent.config.pad_ego_length_width,
                 cfg.agent.config.pad_reward_conditioning,
                 cfg.agent.config.shift_predictions_to_rear_axle,
+                cfg.agent.config.shift_scoring_proposals_to_rear_axle,
                 cfg.agent.config.use_original_camera_order)
     logger.info("checkpoint=%s", cfg.agent.checkpoint_path)
 

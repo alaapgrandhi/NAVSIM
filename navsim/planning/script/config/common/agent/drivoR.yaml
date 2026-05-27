@@ -16,8 +16,8 @@ config:
   full_history_status: false
   pad_ego_length_width: true  # 13-dim ego base (11 + L/W), matches gigapixel DriveDrivoRFull
   pad_reward_conditioning: true  # append the 12 normalized reward coefs -> 25-dim ego (gigapixel was reward-conditioned). Requires pad_ego_length_width=true.
-  shift_predictions_to_rear_axle: true  # gigapixel checkpoints predict bbox-center deltas; shift them to rear-axle before HUGSIM consumes the waypoints.
-  shift_scoring_proposals_to_rear_axle: true  # set true so the trajectory scoring head consumes rear-axle-frame proposals (matching how the scorer checkpoint was trained); independent of shift_predictions_to_rear_axle, which shifts the final selected trajectory.
+  shift_predictions_to_rear_axle: true  # gigapixel checkpoints predict bbox-center deltas; shift them to rear-axle before HUGSIM consumes the waypoints. Override per run with env var DRIVOR_REAR_AXLE_SHIFT.
+  shift_scoring_proposals_to_rear_axle: true  # set true so the trajectory scoring head consumes rear-axle-frame proposals (matching how the scorer checkpoint was trained); independent of shift_predictions_to_rear_axle, which shifts the final selected trajectory. Override per run with env var DRIVOR_SCORING_REAR_AXLE_SHIFT.
   use_original_camera_order: false  # set true (or DRIVOR_ORIGINAL_CAMERA_ORDER=1) to eval the public DrivoR checkpoint (camera order [f, b, l, l1, l2, r, r1, r2]); false uses the current gigapixel-aligned order [f, l, r, b, l1, l2, r1, r2].
 
   long_trajectory_additional_poses: -1 # to load additional poses (not use currently in this version)

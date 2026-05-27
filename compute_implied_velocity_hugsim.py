@@ -17,7 +17,8 @@ Env vars:
   DRIVOR_IMPLIED_VELO_CSV   path to shared CSV (appended; required)
   DRIVOR_PAD_LW             default True
   DRIVOR_REWARD_COND        default True
-  DRIVOR_REAR_AXLE_SHIFT    default True
+  DRIVOR_REAR_AXLE_SHIFT    default True (shifts the final selected trajectory)
+  DRIVOR_SCORING_REAR_AXLE_SHIFT  default True (shifts proposals fed to the scoring head)
   DRIVOR_ORIGINAL_CAMERA_ORDER  default False; set 1 to use the [f, b, l, l1, l2, r, r1, r2]
                                 order the public DrivoR checkpoint was trained with
 """
@@ -64,6 +65,9 @@ def main(cfg: DictConfig) -> None:
         "DRIVOR_REWARD_COND", cfg.agent.config.pad_reward_conditioning)
     cfg.agent.config.shift_predictions_to_rear_axle = _envflag(
         "DRIVOR_REAR_AXLE_SHIFT", cfg.agent.config.shift_predictions_to_rear_axle)
+    cfg.agent.config.shift_scoring_proposals_to_rear_axle = _envflag(
+        "DRIVOR_SCORING_REAR_AXLE_SHIFT",
+        cfg.agent.config.get("shift_scoring_proposals_to_rear_axle", False))
     cfg.agent.config.use_original_camera_order = _envflag(
         "DRIVOR_ORIGINAL_CAMERA_ORDER",
         cfg.agent.config.get("use_original_camera_order", False))
@@ -80,10 +84,11 @@ def main(cfg: DictConfig) -> None:
     logger.info("=== compute_implied_velocity_hugsim ===  scenario=%s  csv=%s",
                 scenario_name, csv_path)
     logger.info("compat flags: pad_lw=%s reward_cond=%s rear_axle_shift=%s "
-                "use_original_camera_order=%s",
+                "scoring_rear_axle_shift=%s use_original_camera_order=%s",
                 cfg.agent.config.pad_ego_length_width,
                 cfg.agent.config.pad_reward_conditioning,
                 cfg.agent.config.shift_predictions_to_rear_axle,
+                cfg.agent.config.shift_scoring_proposals_to_rear_axle,
                 cfg.agent.config.use_original_camera_order)
 
     agent: AbstractAgent = instantiate(cfg.agent)
